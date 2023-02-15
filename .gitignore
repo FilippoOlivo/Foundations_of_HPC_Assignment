@@ -1,8 +1,10 @@
 # Prerequisites
 *.d
 *.job
+img
 #PGM files
 *.txt
+*.qmd
 time
 *.pgm
 *.x
