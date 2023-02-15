@@ -1,0 +1,421 @@
+---
+title: "HPC Assignment"
+author: "Filippo Olivo"
+format: 
+    html:
+        toc: true
+        toc-depth: 3
+    pdf: 
+        toc: true
+        toc-depth: 4
+        fig-format: png
+---
+\newpage 
+\noindent
+
+# Excercise 1 
+
+## Introduction
+
+The aim of the excercise is to implement a parallel version of the Conway's Game of Life through MPI and OpenMP. Game of life is a zero player game which evolution depends only on the initial conditions. In this project I have implemented three possible iteration tecniques:
+
+- Static iteration: we freeze the system at each state $s_i$ and then we evaluate the new cell status $s_{i+1}$ based on the system at state $s_i$
+
+- Ordered iteration: we start from the cell (0,0) and we evolve by lines
+
+::: {layout="[[-20,25,-10,25,-20], []]"}
+![](img/iterate_ordered_intro_1.png){height="100"}
+
+![](img/iterate_ordered_intro_2.png){height="100"}
+
+:::
+
+- Wave iteration: wave that spread in diagonal from cell (0,0) (futher details below)
+
+
+## Metodology 
+The program is written in C language and it can perform the three types of operations explained in the previous section. The world must be read from a ``pgm`` file and s is converted in arrays of ``unsigned char``. The choice of using a matrix of ``unsigned char`` has been made to reduce the usage of RAM. Inside the program the alive cells are represented with the number 0, while the dead cells are represented with the number 255, respectively the black and the white colour in the output grid. The program consist in mainly four modules:
+
+#. Read and write: a support module that read/write from/to a pgm file. In order to distribute the data across the nodes the reading operation is done in parallel (if the code is runned on more than one MPI Task)
+#. Run static: implement the static iteration already mentioned above. 
+#. Run ordered: implement the ordered iteration already mentioned above. Ordered iterations are by definition serial and for this reason I have only implemented a domain decomposition across the nodes (see below for futher details)
+#. Run wave: implement the wave iteration already mentioned above. Due to matter of time this implmenetation is done only with OpenMP (see below for further details)
+
+To evaluate the performances I have run multiple test on the Epyc and Thin nodes of the orfeo cluster changing properly the number of MPI processes and OpenMP threads. In this section I am mainly interested in the speed up described by the formula below:
+$$
+    \text{Speed up} = \frac{T_s}{T_{np}}
+$$
+Where $T_s$ is the time taken by a single process and $T_{np}$ is the time taken by n processes (note that the ideal speed up is given by $\text{Speed up} = n$ ($n$ is the number of processes)
+
+## Implementation
+
+In this section I discuss some technical aspects of the code, in particular I focus on the parallelization methods.
+
+### Read and write operations
+
+Reading from pgm files operation is performed in parallel: from a single .pgm file the master thread reads the header, captures the parameter, such as the size of the matrix, the max value, and the type of the file, and broadcasts them to other MPI Tasks. Each process reads and stores inside an array of ``unsigned char`` a matrix of size equal to $size_{world}$x$R_i$ where $R_i$ is the number of rows, calculated by the formula:
+
+$$
+R_i = 
+\begin{cases}
+\text{floor}\bigg(\frac{size_{world}}{n_{MPI \; Process}}\bigg)+1 & \text{if module}(size_{world},n_{MPI \; Process}) > 0 \\
+\text{floor}\bigg(\frac{size_{world}}{n_{MPI \; Process}}\bigg) & \text{otherwise} \\
+\end{cases}
+$$
+
+The reading is performed throught MPI I/O and more precisely by calling the function ``MPI_File_read``
+
+Writing is performed in parallel: each process writes his output in a separate file and a bash script perform the joining of the files (note that is mandatory to take trace about the rank the process inside the name of the file)
+
+### Initialization
+
+The initialization part is performed in parallel. The work is subdivided among the MPI Tasks and more precisely each of those has to initialize a submatrix of size $size_{world}\cdot R_i$, where $R_i$ is a positive number in the range below given by the formula:
+$$
+R_i = 
+\begin{cases}
+\text{floor}\bigg(\frac{size_{world}}{n_{MPI \; Process}}\bigg)+1 & \text{if module}(size_{world},n_{MPI \; Process}) > 0 \\
+\text{floor}\bigg(\frac{size_{world}}{n_{MPI \; Process}}\bigg) & \text{otherwise} \\
+\end{cases}
+$$
+
+A for loop, parallelized throught the usage of OpenMP, perform the initialization of the submatrix. The scheduling used for the loop paralleliization is static due to the balanced workload that each thread has to perform at each iteration. Increasing the chunk size does not improve the overall performances and, for this reason, I have decided to keep it to the default value (chunk size = 1). After the initialization, the OpenMP parallel region ends. Each MPI Tasks, in the correct order, writes on the target file its their submtrix (the process 0 write also the initial lines that specify the type of file and the dimension of the image).
+
+### Static iteration method
+
+The apporch used to parallelize this type of operation is the domain decomposition: each MPI Task has to work on a submatrix of size ... as defined in the previous subsection. In order to allow each process to calculate the new status of its cells, the MPI Task needs to have also the last line of the submatrix of the process before (rank-1 and size-1 for the first process) and the first line of the submatrix of the process after (rank+1 and 0 for the process size-1). Below is shown example with a matrix 6x6 and 3 MPI Processes (in this case this process has a submatrix of size 2x3 and 3 additional rows). 
+
+![Domain decomposition](img/domain_decomposition_static.png){height="200"}
+
+Each process create another matrix of the same size of the previous one. The idea is to calculate the status $s_{i+1}$ from the matrix of the status $s_{i}$. At the beggining of each iteration each MPI Process send (through a non-blocking send), received from/to the other processes the necessary rows and store them in the local matrix that contains the values of the iteration $s_i$. In order to avoid errors each at iteration the tag changes. It could happen that a process is one complete iteration in advance than the following or previous process). Find above the lines that perform the send and receive of the rows:
+
+![Send and receive process](img/send_receive_ordered.png){height="240"}
+
+
+Then the update method is called it consists in a for loop which, for each cell of status $s_{i+1}$:
+
+- read the value of all the neighbour from matrix of status $s_{i}$
+- calculate the value of the new status and write it on the new matrix
+
+This for loop is parallelized with OpenMP: each MPI Task has to update a bunch of cells independently from other OpenMP threads. The best scheduling policy is the static one and this is reasonable due to the almost costant workload of the iterations. As it concern the chunck size, an increase of it does not bring a significant improvement of the overall performances of the program. For this reason, I have decided to keep it at the default value (chunck size = 1). Note that the program keeps in memory only the matrix of the actual and the previous status.
+
+### Ordered iteration method
+
+Similar to the static iteration method, the ordered iteration method uses a domain decomposition approch. As in the previous case each process reads a portion of the world. Before starting the iteration process, the last MPI Task sends respectively its last row to process 0 and each process sends his first row to the previous process. Each process, at the end of the elaboration, sends its last row to the previous process. Note that in this case an MPI task start the computation when it receives the last row of the following process. 
+
+In this way I expect that the parallelization does not improve the computational time but we have to consider that with this type domain decomposition the memory scales. Because of the fact that each process has its submatrix directly read from the file the overall size of the matrix can be larger then the RAM of a single node. In the serial problem the entire world must fit inside the RAM of a single node.
+
+### Wave iteration method
+
+The data structure that are needed for this method are two matrices of size $size_{world} \times size_{world}$ and an array of struct Cell (below the definition). 
+
+```c
+struct Cell{
+  long row;
+  long col;
+};
+``` 
+
+A single iteration starts with the update of the cell (0,0) of the world. After the update a struct Cell variable is created for all the neightbour of the cell (0,0) and stored in an array. The only purpose of the struct is to represent in a more simple way the cells that must be updated in the next step of the iteration.
+
+Before starting the next step of the single iteration, also the matrix that represent the previous status of the world is updated with the new values. On the following step each OpenMP thread updates a bunch of Cells presents in the array using the previous state world (``for`` loops parallelized throught OpenMP). This procedure continues until the last row and column are updated.
+
+![Wave iteration](img/wave_update.png){height="200"}
+
+The best schedule of the for loop is static, as expected, due to the balanced workload of each iteration of the for cycle. I have chosen to use chunck size equal to 1 in order to parallelize the the update procudure starting from the second step of each iteration.
+
+## Code validation
+
+To asses that the code works properly I have started considering a very small problem with size $10 \times 10$ and the serial version of the program. First I have updated the initial world with only one time and assess that the result was correct. After having assessed that the serial program works properly for a single iteration I have tried to do two iterations and also in this case I manually verified the output. Below the used example:
+
+![Test run static](img/test_static.png){height="200"}
+
+After this procedure I have assesed that the serial cose works properly. To test the parallel computation I have calculated the sha256 for the serial and the parallel output (for different number of MPI tasks, OpenMP threads and size of the world) and verified that these two values were equal.
+
+## Result and performances
+
+I have performed several test to evaluate the computation time and the speedup of the different type of evolution, with different size and with different OpenMP and MPI options. The time has been taken from the start to the end of the MPI parallel region, which almost coincide with the overall time of the program.
+
+### Iterate static
+
+The measure made for this type of iteration method are:
+
+- **OpenMP Scalability**
+- **MPI Strong Scalability**
+- **Weak MPI Scalability**
+
+All the measurements in this section have been made on the Epyc and Thin node of the High performance computing cluster Orfeo whithout the SMT. 
+
+#### OpenMP Scalability
+
+We want to measure how much the program scale when we increase the number of OpenMP threads. The test has been made with the OpenMP option ``OMP_PROC_BIND=close`` and I have placed one single MPI Task for each socket with the option ``--map-by socket`` when I have used 1 or 2 sockets on the same machine and with the options ``--map-by node --bind-to socket`` when I have used more than 3 socket (up to 6 socket for Epyc nodes and up to 4 for Thin node). For the Epyc node I have tested two different sizes of the matrix with different number of iterations:
+
+- Size: $25000\times 25000$ and 50 iterations
+- Size: $25000\times 25000$ and 100 iterations
+- Size $12500\times 125000$ and 50 iterations
+
+The graphs below show the OpenMP scalability for the epyc nodes:
+
+
+![OpenMP scalability - 1 socket](img/epyc_1_socket.png){height="350"}
+
+![OpenMP scalability - 2 sockets](img/epyc_2_sockets.png){height="350"}
+
+![OpenMP scalability - 3 sockets](img/epyc_3_sockets.png){height="350"}
+
+![OpenMP scalability - 4 sockets](img/epyc_4_sockets.png){height="350"}
+
+![OpenMP scalability - 5 sockets](img/epyc_5_sockets.png){height="350"}
+
+![OpenMP scalability - 6 sockets](img/epyc_6_sockets.png){height="350"}
+
+![OpenMP scalability - comparison matrix 25000x25000, 100 it](img/epyc_comparison.png){height="350"}
+
+\newpage
+
+As we can see from all the plots we have that as the workload increases, the speed up increases too. We can also see that as the number of MPI cores increases the speedup decreses. For example if we consider on epyc node the line of the matrix of size $25000\times 25000$ the speedup at 64 OpenMP threads with 1 MPI Task is about 52 indeed for 6 MPI Task the speed up is around 48 (Figure[10]). This difference is even larger if we consider the other two cases.
+
+
+For the Thin node I have tested different two sizes of the matrix with different number of iterations:
+
+- Size: $12500\times 12500$ and 50 iterations
+- Size: $12500\times 12500$ and 100 iterations
+- Size $62500\times 62500$ and 50 iterations
+
+Below the graph of the scalability for the thin nodes:
+
+![OpenMP scalability Thin - 1 socket](img/thin_1_socket.png){height="350"}
+
+![OpenMP scalability Thin - 2 sockets](img/thin_2_sockets.png){height="350"}
+
+![OpenMP scalability Thin - 3 sockets](img/thin_3_sockets.png){height="350"}
+
+![OpenMP scalability Thin - 4 sockets](img/thin_4_sockets.png){height="350"}
+\newpage
+
+All the observations made for Epyc nodes are valid, even, on the Thin nodes
+
+
+
+#### MPI weak scalability
+
+In this section the main idea is to mantain the workload for each MPI Task constant. For this purpose I have decided to increase the size of the matrix: the workload is basically determine by the size of the matrix that each MPI Task has to work on. The formula that I have used to determine the size of the matrix is:
+
+$$
+x\cdot \frac{x}{n} = s_{serial}^2
+$$
+
+Where $s_{serial}$ is the size of a column/row of the original world. Below the size of the world that I have used for the analysis:
+
+| MPI Tasks |Size|
+|:-----------:|:------:|
+| 1         |10000|
+| 2         |14143|   
+| 3         | 17321|
+|4          |20000|
+|5          |22361|
+|6          |24495|
+
+Below two graphs (using respectively 1 OpenMP thread and 32 OpenMP threads) that shows the time of elaboration for the different number of MPI Tasks). More plots of this kind are available on the github repository. As expected we can see that the computation time is almost constant.
+
+![MPI Weak scalability - 1 OpenMP thread](img/weak_scalability_mpi.png){height="350"}
+
+![MPI Weak scalability - 32 OpenMP threads](img/weak_scalability_mpi_32.png){height="350"}
+
+\newpage
+
+#### Strong MPI scalability
+
+In this section the main idea is to test how the code scales when the number of MPI Tasks increses on a fixed size world. To do so I have run the program using the option ``--map-by core`` to place a different MPI Task on each core. The test has been perform on epyc node with the following parameters:
+
+- Size=$25000\times 250000$, it = 50 
+- Size=$25000\times 250000$, it = 100
+- Size=$12500\times 125000$, it = 100
+
+And on thin node with size $12500\times 12500$ and 50 iterations. Below the graphs:
+
+![MPI Strong scalability - Epyc](img/epyc_mpi_sockets.png){height="350"}
+\newpage
+
+![MPI Strong scalability - Epyc](img/thin_mpi_sockets.png){height="350"}
+
+We can see, both on epyc and thin nodes, that before "*running out*" of the first node (48 MPI Tasks for thin and 128 MPI Tasks for epyc) the speed up is above the ideal one of 1:1. Another important thing is that, similairly to the OpenMP scalability, the speedup is higher when the workload is higher.
+
+### Iterate ordered
+
+The program is strictly serial and, for this reason, I expect that the elapsed time is constant, or increase due to parallelization overhead, when we increases the numeber of MPI Tasks. Also a small increment on the performances are not excluded due to better usage of the cache
+
+\newpage
+![Ordered Iteration - Epyc](img/epyc_ordered.png){height="350"}
+
+### Iterate wave
+
+The test has been performed on a world of size $10000 \times 10000$ and 50 as number of iteration from 1 to 64 OpenMP threads. The OpenMP options were ``OMP_PLACES=cores`` end ``OMP_PROC_BIND=close``. The green in the plot below represent the scalability when no numactl option have been set, indeed for the red line I have used the following policy
+
+- OpenMP threads from 1 to 16: ``--interleave=0``
+- OpenMP threads from 17 to 32: ``--interleave=0,1``
+- OpenMP threads from 33 to 48: ``--interleave=0,1,2``
+- OpenMP threads from 49 to 64: ``--interleave=0,1,2,3``
+
+If we consider the green line we can se that the speed up is higher than the theoretical one for the number of core in the range (14,36). Something similar happen for thr red line but fot the number of cores in the range (16,24). We can also se that the speed up without the usage of numactl is higher until 32 OpenMP threads. When we pass from 32 to 34 threads the speed up represented by the red line (wave iteration with the usage of numactl) increase drastically.
+
+![Wave Iteration - Epyc](img/wave_scalability.png){height="350"}
+
+## Final considerations
+
+At the end of this analysis I can say that program achived a good level of scalability both in wave and static iteration methods. As it concerns the ordered iteration my conclusion is that it is stricly serial and the only possible parallelization is the one presented in the section above which give as memory scalability. 
+
+Some possible improvements could be:
+
+- Optimization of the writing procedure through MPI I/O. 
+- Parallelize the reading from the file with openMP in order to improve also the memory allocation
+
+# Excercise 2
+
+The goal of the excercise is to compare the performances of the math libraries OpenBlas, Blis and MKL on the epyc node. The metric that has been used to compare the performances is the number of flops per second measured in GFlop/s. We are mainly intrestated in analyzing the size scaling and the core scaling of the three algotithms. To achive the goal I have used a slightly modified version of the code ``dgemm.c`` present in the Assignment folder. 
+
+
+## Size scaling
+
+For the size scaling I have increased the size of the matrix from $2000 \times 20000$ to $20000 \times 20000$ by steps of $500$ (at each step I have increased both the number of rows and the numbrer of columns in order to have always square matrices). For each size and math library I have taken 10 different measurment.
+
+
+Below the tested policies (default options: ``OMP_NUM_THREADS=64`` and ``OMP_PLACES=cores``):
+
+- ``OMP_PROC_BIND=close``, no numaclt options
+- ``OMP_PROC_BIND=close``, ``--interleave=0,1,2,3``
+- ``OMP_PROC_BIND=spred``, no numaclt options
+- ``OMP_PROC_BIND=close``, ``--interleave=0,1,2,3,4,5,6,7``
+
+### Single precison 
+
+The theoretical peak performance for a single socket on an epyc node is:
+
+$$
+P = n. cores\cdot frequency \cdot \frac{FLOPC}{cycle} = 64\cdot 2.6 GHz\cdot 32 = 5324,8 GFlops
+$$
+
+A AMD Epyc 7H12 (the one that we can find on orfeo cluster) can deliver 16 double precision $\frac{FLOPS}{cycle}$ and 32 single precision $\frac{FLOPS}{cycle}$
+
+The graphs below represent the scaling of math library when the policy changes (one graph for each policy). In all the three math libraries the usage of numactl options improve the overall performance. This is reasonable because of the lower average time that an OpenMP thread needs to access the RAM (better memory allocation). We can also see, on blis graph, that the curve of the policy spread with the usage of numactl, has a local maximum for $n=m=k=9000$. A possible explanation for this behaviour cuold be linked to a optimal cache usage at those sizes. The table below shows the peak performances:
+
+\newpage
+
+| Settings                             | OpenBlas | Size OpenBlas | Blis    | Size Blis | MKL     | Size MKL |
+|--------------------------------------|----------|---------------|---------|-----------|---------|----------|
+| close, no numactl                    | 2493.85  | 19500         | 2579.73 | 5500      | 2097.68 | 5500     |
+| close, --interleave=0,1,2,3          | 3838.42  | 18500         | 3930.98 | 19500     | 2770.25 | 20000    |
+| spread, no numactl                   | 2553.95  | 18000         | 2959.80 | 7500      | 2199.13 | 7000     |
+| spread, --interleave=0,1,2,3,4,5,6,7 | 4444.82  | 19500         | 4314.61 | 19500     | 3042.04 | 7000     |
+
+![Comparison OpenBlas - Epyc](img/float_obals_comparison.png){height="350"}
+
+![Comparison Blis - Epyc](img/float_blis_comparison.png){height="350"}
+
+![Comparison MKL - Epyc](img/float_mkl_comparison.png){height="350"}
+\newpage
+
+In the graphs below I have gathered togheter the different math libraries (one plot for each policy). For the close policy with no numactl options we can see that at the beggining blis perform better then the other until $n=m=k=5500$. Starting from $n=m=k=6000$ the GFlops of all the fall down until $n=m=k=10000$. Note that from $n=m=k=70000$ openBlas perform better than Blis. 
+
+With the policy with ``OMP_PROC_BIND=close`` and ``numactl --interleave=0,1,2,3`` we have that Blis perform slightly better than OpenBlas.
+
+Finally with the policy ``OMP_PROC_BIND=spread`` and ``numactl --interleave=0,1,2,3,4,5,6,7`` Blis perform better than the other at the beginning until $n=m=k=13500$, after which Blis and OpenBlas are almost equivalent
+
+![Comparison close, no numactl options - Epyc](img/float_close_comparison.png){height="350"}
+
+![Comparison close, with numactl - Epyc](img/float_numactl_close_comparison.png){height="350"}
+
+![Comparison spread, with numactl - Epyc](img/float_numactl_spread_comparison.png){height="350"}
+
+\newpage
+
+### Double precision
+
+The theoretical peak performance for a single socket on an epyc node is:
+
+$$
+P = n. cores\cdot frequency \cdot \frac{FLOPC}{cycle} = 64\cdot 2.6 GHz\cdot 32 = 5324,8 GFlops
+$$
+
+The graphs below represent the scaling of math library when the policy changes (one graph for each policy). 
+
+From the OpenBLAS plot we can see that the usage of numactl improve the performance. As it concern the the ``OMP_PROC_BIND`` we can understand that until $n=m=k=15000$ it reduce the performances. After that ``OMP_PROC_BIND=spread`` overcame ``OMP_PROC_BIND=close`` if we consider the curves with numactl. 
+
+The blis graph shows ``OMP_PROC_BIND=spread`` with the usage of numactl is the best policy almost everywhere. It is important to highlight that there is a large drop in performance at $n=m=k=11000$ for all the policies. 
+
+As it concern MKL we can se that the policy with ``OMP_PROC_BIND=spread`` and the usage of numactl perform better in the initial part and, after a peak at $n=m=k=10000$, we have a drop in performances. On the tail the policy with ``OMP_PROC_BIND=close`` with numactl works better then the others.
+
+| Settings                             | OpenBlas | Size OpenBlas | Blis    | Size Blis | MKL     | Size MKL |
+|--------------------------------------|----------|---------------|---------|-----------|---------|----------|
+| close, no numactl                    | 1134.09  | 16000         | 1168.78 | 16500     | 881.48  | 16000    |
+| close, --interleave=0,1,2,3          | 1842.97  | 18500         | 1909.73 | 16500     | 1683.39 | 20000    |
+| spread, no numactl                   | 1225.07  | 17000         | 1222.11 | 17000     | 974.12  | 16500    |
+| spread, --interleave=0,1,2,3,4,5,6,7 | 2244.77  | 20000         | 2583.36 | 20000     | 1618.16 | 20000    |
+
+![Comparison OpenBlas - Epyc](img/double_obblas_comparison.png){height="350"}
+
+![Comparison Blis - Epyc](img/double_blis_comparison.png){height="350"}
+
+![Comparison MKL - Epyc](img/double_mkl_comparison.png){height="350"}
+
+\newpage
+
+In the graphs below I have gathered togheter the different math libraries (one plot for each policy). 
+
+For the policy ``OMP_PROC_BIND=close`` without numactl we can state except for the beginning until $n=m=k=9000$ OpenMP and Blis are almost equivalent. MKL is a worse the the other two.
+
+If we take a look the graph of the policy ``OMP_PROC_BIND=close`` with the usage of numactl we can see that the best math library is Blis followed by OpenBlas. The worst one is MKL. All the three lines follows almost the same trend
+
+Finally the graph of the policy ``OMP_PROC_BIND=spread`` with the usage of numactl show us that the best library is Blis followed by openBlas and MKL. In this case the peak performance of the best library (Blis) is 2244.77, much larger than the peak performance in the other cases. 
+
+![Comparison close, no numactl options - Epyc](img/double_close_comparison.png){height="350"}
+
+![Comparison close, with numactl - Epyc](img/double_numactl_close_comparison.png){height="350"}
+
+![Comparison spread, with numactl - Epyc](img/double_numactl_spread_comparison.png){height="350"}
+
+
+## Core scaling
+
+In this section I analyze the behaviour of the different math libraries on a fixed value of $n,m,k$ when the number of OpenMP threads increases. I have run the program for two different values of the parameter, $10000$ and $20000$. The policy that I have tested are:
+
+- ``OMP_PROC_BIND=close`` whitout numactl options
+- ``OMP_PROC_BIND=close`` with the following numaclt policy:
+    - From 1 to 16 OpenMP threads: ``--interleave=0``
+    - From 17 to 32 OpenMP threads: ``--interleave=0,1``
+    - From 13 to 48 OpenMP threads: ``--interleave=0,1,2``
+    - From 49 to 64 OpenMP threads: ``--interleave=0,1,2,3``
+- ``OMP_PROC_BIND=spread`` without numaclt policy:
+
+### Single precision
+
+The plots below show of the OpenMP scalability. In all the three cases we have the maximum scalability when we use the policy ``OMP_PROC_BIND=close`` and numactl. If we consider OpenBlas we have that the speed with ``OMP_PROC_BIND=close`` is larger than the speed up with ``OMP_PROC_BIND=spread``, indeed if we consider the graphs Blis we can see that the speed up is almost the same in both the cases. Finally we have that in MKL the speed up is higher in ``OMP_PROC_BIND=spread`` than ``OMP_PROC_BIND=close``. for  The graphs of Blis and MKL when $n=m=k=10000$ shows that the speed up with a ``OMP_PROC_BIND=spread`` has a strange behavious on the right tail.
+
+![OpenBlas scalability - n=m=k=20000](img/oblas_scalability_20000.png){height="350"}
+
+![OpenBlas scalability - n=m=k=10000](img/oblas_scalability_10000.png){height="350"}
+
+![Blis scalability - n=m=k=20000](img/blis_scalability_20000.png){height="350"}
+
+![Blis scalability - n=m=k=10000](img/blis_scalability_10000.png){height="350"}
+
+![MKL scalability - n=m=k=20000](img/mkl_scalability_20000.png){height="350"}
+
+![MKL scalability - n=m=k=10000](img/mkl_scalability_10000.png){height="350"}
+
+\newpage
+
+### Double precision
+
+The plot below show of the OpenMP scalability. In all the three cases we have the maximum scalability when we use the policy ``OMP_PROC_BIND=close`` and numactl. If we consider OpenBlas we have that the speed with ``OMP_PROC_BIND=close`` is larger than the speed up with ``OMP_PROC_BIND=spread``, while if we consider the graphs Blis and MKL we can see that the speed up is almost the same in both the cases. The graphs ofMKL when $n=m=k=10000$ shows that the speed up with a ``OMP_PROC_BIND=spread`` has a strange behavious on the right tail.
+
+![OpenBlas scalability - n=m=k=20000](img/oblas_scalability_double_20000.png){height="350"}
+
+![OpenBlas scalability - n=m=k=10000](img/oblas_scalability_double_10000.png){height="350"}
+
+![Blis scalability - n=m=k=20000](img/blis_scalability_double_20000.png){height="350"}
+
+![Blis scalability - n=m=k=10000](img/blis_scalability_double_10000.png){height="350"}
+
+![MKL scalability - n=m=k=20000](img/mkl_scalability_double_20000.png){height="350"}
+
+![MKL scalability - n=m=k=10000](img/mkl_scalability_double_10000.png){height="350"}
