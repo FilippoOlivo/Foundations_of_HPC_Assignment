@@ -37,7 +37,7 @@ void update_cell(unsigned char * world, long rows, long world_size, long num_loc
 
     int cond = sum/MAXVAL;
 
-    if(cond==5){
+    if(cond==5 || cond==6){
       world[i]=0;
     }else{
       world[i] = MAXVAL;
@@ -66,7 +66,7 @@ void update_cell_serial(unsigned char * world,long world_size){
 
   int cond = sum/MAXVAL;
 
-  if(cond==5){
+  if(cond==5 || cond==6){
     world[i]=0;
   }else{
     world[i] = MAXVAL;

@@ -112,7 +112,7 @@ void iteration(unsigned char * world, unsigned char * world_prev, struct Cell **
 
     int cond = sum/MAXVAL;
 
-    if(cond==5){
+    if(cond==5 || cond==6){
       world_prev[row*size+col]=0;
     }else{
       world_prev[row*size+col] = MAXVAL;

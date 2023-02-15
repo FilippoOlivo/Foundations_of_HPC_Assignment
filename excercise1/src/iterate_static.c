@@ -68,7 +68,7 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
     
     int cond = sum/MAXVAL;
     
-    if(cond==5){
+    if(cond==5 || cond==6){
       world2[i]=0;
     }else{
       world2[i] = MAXVAL;
@@ -103,7 +103,7 @@ void update_serial(unsigned char * world, unsigned char * world_prev,long size){
 
     int cond = sum/MAXVAL;
 
-    if(cond==5){
+    if(cond==5 || cond==6){
       world_prev[i]=0;
     }else{
       world_prev[i] = MAXVAL;

@@ -16,7 +16,7 @@ int generate_seed(int omp_rank, int mpi_rank){
   return 2*omp_rank*mpi_rank+omp_rank*omp_rank+mpi_rank*mpi_rank+100;
 }
 
-void initialize_parallel(unsigned char * world, long world_size,int size, int rank, const char *filename){
+void initialize_parallel(unsigned char * world, long world_size,int size, int rank){
   long local_rows;
 
   //calculate the number of rows of each MPI Task
@@ -39,13 +39,13 @@ void initialize_parallel(unsigned char * world, long world_size,int size, int ra
       }
     }
   }
-  
+    char * filename = "init";
   write_pgm_image( world, 255, world_size, local_rows, filename, rank, size);
 }
 
 
 
-void initialize_serial(unsigned char * world, long size, const char * filename){
+void initialize_serial(unsigned char * world, long size){
 
   world = (unsigned char *)malloc(size*(size+1)*sizeof(unsigned char));
 
@@ -64,6 +64,8 @@ void initialize_serial(unsigned char * world, long size, const char * filename){
       }
     }
   }
+  
+  char * filename = "init";
 
   write_pgm_image( world, 255, size, size, filename, 0, 1);
 }
@@ -82,11 +84,23 @@ void initialization(long world_size,const char * filename , int * argc, char ** 
   unsigned char * world;
   if(size > 1){
 
-    initialize_parallel(world,world_size,size,rank,filename);
+    initialize_parallel(world,world_size,size,rank);
   }else{
-    initialize_serial(world,world_size,filename);
+    initialize_serial(world,world_size);
   }
   
+  
+  char * command = (char *)malloc(50);
+  if(rank==0)
+  {
+    sprintf(command, "cat init_00* > %s",filename);
+    system(command);
+  
+    sprintf(command, "rm init_00*");
+    system(command);
+  
+    free(command);
+  }
   MPI_Finalize();
   free(world);
 }
