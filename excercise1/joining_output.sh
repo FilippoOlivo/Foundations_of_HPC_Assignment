@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#Perform the joining of the output file produced by the game of life program
+
 var=$(ls output | grep static_00 | wc -l)
 if [ ${var} -gt 0 ]
 then

@@ -1,4 +1,8 @@
 #!/bin/bash
+
+#This simple script perform the joining of the partial snap files 
+#produced by a run of the game of life program
+
 l=$(ls snap | grep  snap_static_*_00* | cut -d'_' -f 3 | sort -u)
 for i in ${l}
 do

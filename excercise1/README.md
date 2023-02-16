@@ -32,6 +32,8 @@ You can run the code with ``mpirun``. The input pameters are
     - 1: static
     - 2: wave
 
+After running the program execute the scripts joining_snap.sh and joining_output.sh to perform the joining of respectively the partial snap and output files.
+
 ## Other files
 
 In the folder times you can find the ``.csv`` files where I have printed the elapsed times of the test that I have performed. In the folder plots you can find the plots of the scalability. 
