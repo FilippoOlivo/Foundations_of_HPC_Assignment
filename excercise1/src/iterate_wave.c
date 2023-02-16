@@ -79,14 +79,15 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
 
 //copy all the world 
 void copy_world(unsigned char * world, unsigned char * world_prev, long world_size){
-  #pragma omp for
+  #pragma omp for schedule(static,1)
   for(long i=0; i<world_size*world_size; i++)
     world_prev[i] = world[i];
 }
 
 //Copy the values in the Cells storeed in next update from world to world_prev
 void copy_world_partial(unsigned char * world, unsigned char * world_prev, long world_size,struct Cell ** next_update, long size_next_update){
-  #pragma omp for
+  
+  #pragma omp for schedule(static,1)
   for(long i=0; i<size_next_update; i++){
     long col = next_update[i]->col;
     long row = next_update[i]->row;
@@ -97,19 +98,26 @@ void copy_world_partial(unsigned char * world, unsigned char * world_prev, long 
 
 void iteration(unsigned char * world, unsigned char * world_prev, struct Cell ** next_update,long size, long size_next_update,int it)
 {
-  #pragma omp for 
+  #pragma omp for schedule(static,1)
   for(int i=0; i<size_next_update; i++){
+
+    //Calulate the value of the actual cell
     long col = next_update[i]->col;
     long row = next_update[i]->row;
 
+    //Determine the rows and columns of the neightbours
     long col_prev = col-1>=0 ? col-1 : size-1;
     long col_next = col+1<size ? col+1 : 0;
     long row_prev = row-1>=0 ? row-1 : size-1;
     long row_next = row+1<size ? row+1 : 0;
-    int sum = world[row_prev*size+col_prev]+world[row_prev*size+col]+
-      world[row_prev*size+col_next]+world[row*size+col_prev]+world[row*size+col_next]+
-      world[row_next*size+col_prev]+world[row_next*size+col]+world[row_next*size+col_next];
-
+    int sum = world[row_prev*size+col_prev]+
+              world[row_prev*size+col]+
+              world[row_prev*size+col_next]+
+              world[row*size+col_prev]+
+              world[row*size+col_next]+
+              world[row_next*size+col_prev]+
+              world[row_next*size+col]+
+              world[row_next*size+col_next];
     int cond = sum/MAXVAL;
 
     if(cond==5 || cond==6){

@@ -8,7 +8,6 @@
 
 #ifndef RW_PGM
 #define RW_PGM
-
 void read_pgm_image( unsigned char **image, int *maxval, long *local_rows, long *world_size, 
                     const char *image_name, int rank, int size, MPI_Status * s, MPI_Request * r);
 void write_pgm_image( void *image, int maxval, int xsize, int ysize, const char *image_name, int rank, int size);
@@ -24,6 +23,7 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
   //tags definition
     int tag_odd = 2*it;
     int tag_even = 2*it+1;
+
     //each process send his fist and last row to respectively the process with rank-1 and rank + 1.
     //Process 0 send his fist line to process size -1 
     //Process size-1 send his last row to process 0
@@ -47,27 +47,31 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
     }
   }
 
-  #pragma omp for
+  #pragma omp for schedule(static,1)
   for(long long i=world_size; i<world_size*(local_rows+1); i++){
+
+    //Calculate position of the actual cell
     long col = i%world_size;
     long r = i/world_size;
     
+    //Calculate the neightbours
     long col_prev = col-1>=0 ? col-1 : world_size-1;
     long col_next = col+1<world_size ? col+1 : 0;
     long r_prev = r-1;
     long r_next = r+1;
 
+    //Determine the number of dead neightbours
     int sum = world1[r_prev*world_size+col_prev]+
-      world1[r_prev*world_size+col]+
-      world1[r_prev*world_size+col_next]+
-      world1[r*world_size+col_prev]+
-      world1[r*world_size+col_next]+
-      world1[r_next*world_size+col_prev]+
-      world1[r_next*world_size+col]+
-      world1[r_next*world_size+col_next];
-    
+              world1[r_prev*world_size+col]+
+              world1[r_prev*world_size+col_next]+
+              world1[r*world_size+col_prev]+
+              world1[r*world_size+col_next]+
+              world1[r_next*world_size+col_prev]+
+              world1[r_next*world_size+col]+
+              world1[r_next*world_size+col_next];
     int cond = sum/MAXVAL;
     
+    //Update the cell
     if(cond==5 || cond==6){
       world2[i]=0;
     }else{
@@ -78,29 +82,32 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
   #pragma omp barrier
 }
 
-
 void update_serial(unsigned char * world, unsigned char * world_prev,long size){
 
-  #pragma omp for
+  #pragma omp for schedule(static,1)
   for(long i=0; i<size;i++){
     world[i] = world[size*size+i];
     world[size*(size+1)+i] = world[size+i];
   }
   
 
-  #pragma omp for
+  #pragma omp for schedule(static,1)
   for(int i=size; i<size*(size+1); i++){
+
+    //Calculate position of the actual cell
     long col = i%size;
     long row = i/size;
+
+    //Calculate the neightbours
     long col_prev = col-1>=0 ? col-1 : size-1;
     long col_next = col+1<size ? col+1 : 0;
     long row_prev = row-1;
     long row_next = row+1;
 
+    //Determine the number of dead neightbours
     int sum = world[row_prev*size+col_prev]+world[row_prev*size+col]+
       world[row_prev*size+col_next]+world[row*size+col_prev]+world[row*size+col_next]+
       world[row_next*size+col_prev]+world[row_next*size+col]+world[row_next*size+col_next];
-
     int cond = sum/MAXVAL;
 
     if(cond==5 || cond==6){
@@ -113,12 +120,15 @@ void update_serial(unsigned char * world, unsigned char * world_prev,long size){
   
 }
 
-
 void iterate_static(const int rank, const int size, unsigned char ** world, 
                               const long world_size, const long local_rows, const int times, const int s,
                               MPI_Status * status, MPI_Request * req){
+
   unsigned char * world_local = *world;
+
+  //Allocate the memory for the previous state
   unsigned char * world_local_prev = (unsigned char *)malloc(world_size*(local_rows+2)*sizeof(unsigned char) );
+
   #pragma omp parallel
   {
   for(int i=1; i<=times; i++){ 
@@ -173,22 +183,38 @@ void run_static(char * filename, int times, int s ,int * argc, char ** argv[]){
     MPI_Finalize();
     exit(1);
   }
+
+  //start time
   double t_start=MPI_Wtime();
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+  /*Read the matrix:
+    - Calculate the number of local rows
+    - Allocate the memory of word (world_size*(local_rows+2)). The first row
+      is used to store the value last row of the previous process (size-1 if 
+      rank == 0) and the last row is used to store the first row of the previous
+      process. In the case of a single MPI Task the first row will store the row
+      of of the world and the last line will store the fist row of the world
+    - Read the values: the first value is stored in world[world_size]
+  */
   read_pgm_image( &world, &maxval, &local_size, &world_size,filename,rank,size,&status,&req);
 
   iterate_static(rank, size, &world, world_size, local_size, times, s,&status, &req);
 
+  //Wait that all MPI Task finisch the elaboration
   MPI_Barrier(MPI_COMM_WORLD);
+
   char * fname = (char*)malloc(60);
   sprintf(fname, "output/out");
   write_pgm_image(world,255,world_size,local_size,fname,rank,size);
   free(fname);
+
   MPI_Barrier(MPI_COMM_WORLD);
+
   if(rank==0)
     printf("%d,%d,%f\n",size,omp_get_max_threads(), MPI_Wtime()-t_start);
+  
   MPI_Finalize();
   free(world);
 }

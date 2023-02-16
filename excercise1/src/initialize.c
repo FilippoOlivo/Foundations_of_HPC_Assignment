@@ -11,14 +11,14 @@ void set_parameters(int rank, int size, long world_size, long * first_row, long 
 #endif
 #define MAXVAL 255
 
-
+//generate a random seed
 int generate_seed(int omp_rank, int mpi_rank){
   return 2*omp_rank*mpi_rank+omp_rank*omp_rank+mpi_rank*mpi_rank+100;
 }
 
 void initialize_parallel(unsigned char * world, long world_size,int size, int rank){
+  
   long local_rows;
-
   //calculate the number of rows of each MPI Task
   local_rows= world_size%size-rank <= 0 ? (long)(world_size/size) : (long)(world_size/size)+1;
 
@@ -29,8 +29,10 @@ void initialize_parallel(unsigned char * world, long world_size,int size, int ra
   //Fill the matrix
   #pragma omp parallel
   {
+    //set seed
     srand(generate_seed(rank,omp_get_thread_num()));
-    #pragma omp for
+
+    #pragma omp for schedule(static,1)
     for(int i=world_size;i<world_size*(local_rows+1);i++){
       if(rand()%100<70){
         world[i] = 255;
@@ -39,7 +41,7 @@ void initialize_parallel(unsigned char * world, long world_size,int size, int ra
       }
     }
   }
-    char * filename = "init";
+  char * filename = "init";
   write_pgm_image( world, 255, world_size, local_rows, filename, rank, size);
 }
 
@@ -51,10 +53,11 @@ void initialize_serial(unsigned char * world, long size){
 
   #pragma omp parallel
   {
+    //Calculate the seed
     int seed = generate_seed(0,omp_get_thread_num());
 
     srand(generate_seed(0,omp_get_thread_num()));
-    #pragma omp for 
+    #pragma omp for schedule(static,1)
     for(long long i=size; i<size*(size+1); i++){
       int val = rand()%100;
       if(val>70){
@@ -92,11 +95,14 @@ void initialization(long world_size,const char * filename , int * argc, char ** 
   MPI_Barrier(MPI_COMM_WORLD);
   
   char * command = (char *)malloc(50);
+
+  //Join the partial output in a unique .pgm file
   if(rank==0)
   {
     sprintf(command, "cat init_00* > %s",filename);
     system(command);
   
+    //Remove the partial files
     sprintf(command, "rm init_00*");
     system(command);
   
