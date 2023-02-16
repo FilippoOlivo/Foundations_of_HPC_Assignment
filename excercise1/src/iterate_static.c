@@ -147,7 +147,7 @@ void iterate_static(const int rank, const int size, unsigned char ** world,
       world_local_prev = temp;
       if(i%s==0){
         char * fname = (char*)malloc(60);
-        sprintf(fname, "snap/snap_%03d",i);
+        sprintf(fname, "snap/snap_static_%03d",i);
 	      write_pgm_image(world_local,255,world_size,local_rows,fname,rank,size);
         free(fname);
       }
@@ -206,7 +206,7 @@ void run_static(char * filename, int times, int s ,int * argc, char ** argv[]){
   MPI_Barrier(MPI_COMM_WORLD);
 
   char * fname = (char*)malloc(60);
-  sprintf(fname, "output/out");
+  sprintf(fname, "output/out_static");
   write_pgm_image(world,255,world_size,local_size,fname,rank,size);
   free(fname);
 

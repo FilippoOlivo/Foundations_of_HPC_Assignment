@@ -93,7 +93,9 @@ int main(int argc, char * argv[]){
       printf("argument -%c not known\n", c ); break;
     }
   }
-
+  if(dump == 0){
+    dump = 100000;
+  }
   if(action == INIT){
     //printf("Initialize matrix\n");
     printf("num elements = %ld\n",world_size);

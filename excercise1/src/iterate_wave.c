@@ -131,24 +131,32 @@ void iteration(unsigned char * world, unsigned char * world_prev, struct Cell **
 
 //Determine the cell for the next iteration
 void initialize_next_update(struct Cell ** next_update, int size_next_update, int it){
-    #pragma omp for
-    for(int i=0;i<it;i++){
-      next_update[i]->row = i; next_update[i]->col = it;
-      next_update[i+it]->row = it; next_update[i+it]->col = i;
-    }
+  
+  #pragma omp for
+  for(int i=0;i<it;i++){
+    next_update[i]->row = i; next_update[i]->col = it;
+    next_update[i+it]->row = it; next_update[i+it]->col = i;
+  }
+  #pragma omp master
+  {
     next_update[size_next_update-1]->row = it; 
     next_update[size_next_update-1]->col = it;
+  }
+
 }
 
 //Compute a single iteration
-void update_ordered(unsigned char * world, unsigned char * world_prev, long world_size, struct Cell ** next_update){
+void update_ordered(unsigned char * world, unsigned char * world_prev, 
+                    long world_size, struct Cell ** next_update)
+{
   int size_next_update = 1;
   double time,time_copy,time_init;
-    struct  timespec ts;
+
+
   for(int it = 0;it<world_size;it++){
 
     size_next_update = it != 0 ? size_next_update+2 : 1;
-    
+
     //Determine the rows that are going to be updated by the next instruction
     initialize_next_update(next_update,size_next_update,it);
 
@@ -157,14 +165,13 @@ void update_ordered(unsigned char * world, unsigned char * world_prev, long worl
     copy_world_partial(world_prev,world,world_size,next_update,size_next_update);
 
   }
-
 }
 
 void run_wave(char * filename, int times, int s ,int * argc, char ** argv[])
 {  
   int omp_rank, omp_size;    
   unsigned char * world;
-  
+
   long world_size = 0;
   long ysize = 0;
   int maxval = 0;
@@ -178,32 +185,35 @@ void run_wave(char * filename, int times, int s ,int * argc, char ** argv[])
 
   unsigned char * world_prev = (unsigned char *)malloc(world_size*world_size*sizeof(char));
 
+  next_update = (struct Cell **)malloc(sizeof(struct Cell *)*(world_size*2-1));
+
+  for(long i=0; i<world_size*2-1;i++){
+    next_update[i] = (struct Cell *)malloc(sizeof(struct Cell)*(world_size*2-1));
+  }
+
   #pragma omp parallel 
   {
 
     copy_world(world,world_prev,world_size);
 
-    #pragma omp single
-    {
-      next_update = (struct Cell **)malloc(sizeof(struct Cell *)*(world_size*2-1));
-    }
-    
-    #pragma omp master
-    {
-      for(long i=0; i<world_size*2-1;i++){
-        next_update[i] = (struct Cell *)malloc(sizeof(struct Cell)*(world_size*2-1));
-      }
-    }
-    
-    #pragma omp barrier
-    
-    for(int i=0; i<times; i++){
+    for(int i=1; i<=times; i++){
       update_ordered(world, world_prev, world_size,next_update);
+      if(i%s==0){
+        #pragma omp master
+        {
+          char * fname = (char*)malloc(25);
+          sprintf(fname, "snap/snap_wave_%d.pgm",i);
+          write_pgm_image_test(world,255,world_size,world_size,fname);
+        }
+        #pragma omp barrier
+      }
+
     }
+
     #pragma omp master
     {
       char * fname = (char*)malloc(25);
-      sprintf(fname, "test/%d_out.pgm",omp_get_max_threads());
+      sprintf(fname, "output/out_wave.pgm");
       write_pgm_image_test(world,255,world_size,world_size,fname);
       free(world);
       free(next_update);

@@ -35,9 +35,14 @@ void update_cell(unsigned char * world, long rows, long world_size, long num_loc
     long r_next = r+1;
 
     //Determine the number of dead neightbours
-    int sum = world[r_prev*world_size+col_prev]+world[r_prev*world_size+col]+
-      world[r_prev*world_size+col_next]+world[r*world_size+col_prev]+world[r*world_size+col_next]+
-      world[r_next*world_size+col_prev]+world[r_next*world_size+col]+world[r_next*world_size+col_next];
+    int sum = world[r_prev*world_size+col_prev]+
+              world[r_prev*world_size+col]+
+              world[r_prev*world_size+col_next]+
+              world[r*world_size+col_prev]+
+              world[r*world_size+col_next]+
+              world[r_next*world_size+col_prev]+
+              world[r_next*world_size+col]+
+              world[r_next*world_size+col_next];
     int cond = sum/MAXVAL;
 
     //Update the cell
@@ -46,7 +51,6 @@ void update_cell(unsigned char * world, long rows, long world_size, long num_loc
     }else{
       world[i] = MAXVAL;
     }
-
   }
 }
 
@@ -59,41 +63,55 @@ void update_cell_serial(unsigned char * world,long world_size){
 
   //Update the matrix
   for(long i=world_size; i<world_size*(world_size+1); i++){
+  
+  //Calculate the column and row from the index i
   long col = i%world_size;
   long row = i/world_size;
-    
+  
+  //Calculate the neightbour of the actual cell
   long col_prev = col-1>=0 ? col-1 : world_size-1;
   long col_next = col+1<world_size ? col+1 : 0;
   long row_prev = row-1;
   long row_next = row+1;
 
-  int sum = world[row_prev*world_size+col_prev]+world[row_prev*world_size+col]+
-    world[row_prev*world_size+col_next]+world[row*world_size+col_prev]+world[row*world_size+col_next]+
-    world[row_next*world_size+col_prev]+world[row_next*world_size+col]+world[row_next*world_size+col_next];
-
+  int sum = world[row_prev*world_size+col_prev]+
+            world[row_prev*world_size+col]+
+            world[row_prev*world_size+col_next]+
+            world[row*world_size+col_prev]+
+            world[row*world_size+col_next]+
+            world[row_next*world_size+col_prev]+
+            world[row_next*world_size+col]+
+            world[row_next*world_size+col_next];
   int cond = sum/MAXVAL;
 
+  //Update the cell
   if(cond==5 || cond==6){
     world[i]=0;
   }else{
     world[i] = MAXVAL;
   }
+
+  //Afeter the update of the first row we copy updated row on the
+  //last row of the entire matrix
   if(i==world_size*2){
-
     for(long j=0; j<world_size;j++){
-
       world[world_size*(world_size+1)+j] = world[world_size+j];
     }
   }
 
   }
-  char filename[20]; sprintf(filename,"local.pgm");
-  write_pgm_image_test(world,255,world_size,world_size+2,filename);
+
 }
 
-void iterate_serial(unsigned char* world, long world_size,int times){
-  for(int i=0;i<times;i++){
+void iterate_serial(unsigned char* world, long world_size,int times, int snap){
+  for(int i=1;i<=times;i++){
     update_cell_serial(world,world_size);
+        if(i%snap==0){
+      char * fname = (char*)malloc(60);
+      sprintf(fname, "snap/snap_ord_%03d",i);
+	    write_pgm_image(world,255,world_size,world_size,fname,0,1);
+      free(fname);
+    }
   }
 }
 
@@ -107,8 +125,7 @@ void iterate(unsigned char* world_local, long world_size, long rows, int rank, i
   if(rank==size-1)
     MPI_Isend(&world_local[(rows)*world_size],world_size,MPI_UNSIGNED_CHAR,0,100,MPI_COMM_WORLD,r);
 
-
-  for(long i=0; i<times; i++){
+  for(long i=1; i<=times; i++){
 
     if(rank != 0 ){
       //send the first rows of the local part of the world
@@ -145,24 +162,22 @@ void iterate(unsigned char* world_local, long world_size, long rows, int rank, i
     if(rank == size-1 && i != times-1){
       MPI_Isend(&world_local[(rows)*world_size],world_size,MPI_UNSIGNED_CHAR,0,100,MPI_COMM_WORLD,r);
     }
+
     //printf("PROC %d fine\n",rank);
     MPI_Barrier(MPI_COMM_WORLD);
+    
     //Print snap
-    /*
     if(i%snap==0){
       char * fname = (char*)malloc(60);
-      sprintf(fname, "snap/snap_%03d",i);
+      sprintf(fname, "snap/snap__ord_%03d",i);
 	    write_pgm_image(world_local,255,world_size,rows,fname,rank,size);
       free(fname);
     }
-    */
   }
-
-
 }
 
 void run_ordered(char * filename, int times, int s ,int * argc, char ** argv[]){
-
+  
   int rank, size;    
   unsigned char * world;
   
@@ -199,12 +214,12 @@ void run_ordered(char * filename, int times, int s ,int * argc, char ** argv[]){
   if(size>1){
     iterate(world, world_size, local_size,rank, size,times,s,&status, &req);
   }else{
-    iterate_serial(world,world_size,times);
+    iterate_serial(world,world_size,times,s);
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
   char * fname = (char*)malloc(30);
-  sprintf(fname, "output/out");
+  sprintf(fname, "output/out_ord");
   write_pgm_image(world,255,world_size,local_size,fname,rank,size);
   free(fname);
   MPI_Barrier(MPI_COMM_WORLD);
