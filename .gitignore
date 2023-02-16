@@ -47,7 +47,7 @@ Makefil*
 *.i*86
 *.x86_64
 *.hex
-*.sh
+
 # Debug files
 *.dSYM/
 *.su
