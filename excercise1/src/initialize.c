@@ -89,6 +89,7 @@ void initialization(long world_size,const char * filename , int * argc, char ** 
     initialize_serial(world,world_size);
   }
   
+  MPI_Barrier(MPI_COMM_WORLD);
   
   char * command = (char *)malloc(50);
   if(rank==0)
