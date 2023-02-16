@@ -8,7 +8,7 @@ img
 time
 *.pgm
 *.x
-Makefil*
+
 #copy
 *.copy
 *.x

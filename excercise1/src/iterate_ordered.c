@@ -78,7 +78,7 @@ void update_cell_serial(unsigned char * world,long world_size){
   }else{
     world[i] = MAXVAL;
   }
-  if(i==world_size){
+  if(i==world_size*2){
 
     for(long j=0; j<world_size;j++){
 
@@ -97,7 +97,8 @@ void iterate_serial(unsigned char* world, long world_size,int times){
   }
 }
 
-void iterate(unsigned char* world_local, long world_size, long rows, int rank, int size,int times,MPI_Status * s, MPI_Request * r){
+void iterate(unsigned char* world_local, long world_size, long rows, int rank, int size,int times, 
+             int snap,MPI_Status * s, MPI_Request * r){
 
   long num_local_rows=rows+2;
   int tag_odd=0;
@@ -109,12 +110,12 @@ void iterate(unsigned char* world_local, long world_size, long rows, int rank, i
 
   for(long i=0; i<times; i++){
 
-    if(rank != 0 & rank != size-1){
+    if(rank != 0 ){
       //send the first rows of the local part of the world
       MPI_Isend(&world_local[world_size],world_size,MPI_UNSIGNED_CHAR,rank-1,tag_odd,MPI_COMM_WORLD,r);
       MPI_Isend(&world_local[world_size],world_size,MPI_UNSIGNED_CHAR,rank-1,tag_odd,MPI_COMM_WORLD,r);
     }
-
+    
     //Receive the necessary lines
     if(rank == size-1){
       MPI_Recv(world_local,world_size,MPI_UNSIGNED_CHAR,rank-1,tag_odd,MPI_COMM_WORLD,s);
@@ -144,15 +145,17 @@ void iterate(unsigned char* world_local, long world_size, long rows, int rank, i
     if(rank == size-1 && i != times-1){
       MPI_Isend(&world_local[(rows)*world_size],world_size,MPI_UNSIGNED_CHAR,0,100,MPI_COMM_WORLD,r);
     }
-
+    //printf("PROC %d fine\n",rank);
     MPI_Barrier(MPI_COMM_WORLD);
     //Print snap
-    if(i%s==0){
+    /*
+    if(i%snap==0){
       char * fname = (char*)malloc(60);
       sprintf(fname, "snap/snap_%03d",i);
-	    write_pgm_image(world_local,255,world_size,local_rows,fname,rank,size);
+	    write_pgm_image(world_local,255,world_size,rows,fname,rank,size);
       free(fname);
     }
+    */
   }
 
 
@@ -194,7 +197,7 @@ void run_ordered(char * filename, int times, int s ,int * argc, char ** argv[]){
   read_pgm_image( &world, &maxval, &local_size, &world_size,filename,rank,size,&status,&req);
 
   if(size>1){
-    iterate(world, world_size, local_size,rank, size,times,&status, &req);
+    iterate(world, world_size, local_size,rank, size,times,s,&status, &req);
   }else{
     iterate_serial(world,world_size,times);
   }
