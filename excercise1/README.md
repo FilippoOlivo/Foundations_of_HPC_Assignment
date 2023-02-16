@@ -32,7 +32,7 @@ You can run the code with ``mpirun``. The input pameters are
     - 1: static
     - 2: wave
 
-After running the program execute the scripts joining_snap.sh and joining_output.sh to perform the joining of respectively the partial snap and output files.
+After running the program execute the scripts ``joining_snap.sh`` and ``joining_output.sh`` to perform the joining of respectively the partial snap and output files.
 
 ## Other files
 
