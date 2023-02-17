@@ -1,3 +1,3 @@
 # Excercise 2
 
-To be done
+In this directory you can find the files used to produce the graphs inside the report.
