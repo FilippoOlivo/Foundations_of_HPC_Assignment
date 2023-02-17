@@ -1,11 +1,19 @@
 # Excercise 1
-he aim of the excercise is to implement a parallel version of the Conway's Game of Life through MPI and OpenMP. Game of life is a zero player game which evolution depends only on the initial conditions. In this project I have implemented three possible iteration tecniques:
+The aim of the excercise is to implement a parallel version of the Conway's Game of Life through MPI and OpenMP. Game of life is a zero player game which evolution depends only on the initial conditions. In this project I have implemented three possible iteration tecniques:
 
 - Static iteration: we freeze the system at each state $s_i$ and then we evaluate the new cell status $s_{i+1}$ based on the system at state $s_i$
 
 - Ordered iteration: we start from the cell (0,0) and we evolve by lines
 
 - Wave iteration: wave that spread in diagonal from cell (0,0)
+
+In src directory you can find the source code.
+
+- iterate_static.c: perform the static evolution
+- iterate_ordered.c: perform the ordered evolution
+- iterate_wave.c: perform the wave evolution
+- initialize.c: perform the initialization of the world
+- read_write_pgm.c: file that read and write from/to a .pgm file
 
 ## Compilation
 
@@ -14,6 +22,12 @@ To compile the program:
 ```bash
 make
 ```
+
+Makefile automatically create the folders:
+
+- output: export the final state image
+- snap: export the intermidiate steps images
+- obj: folder in which object files used during compilation will be places
 
 Your computer must have MPI installed
 
