@@ -50,6 +50,11 @@ After running the program execute the scripts ``joining_snap.sh`` and ``joining_
 
 ## Other files
 
-In the folder times you can find the ``.csv`` files where I have printed the elapsed times of the test that I have performed. In the folder plots you can find the plots of the scalability. 
+In the folder times you can find the ``.csv`` files where I have printed the elapsed times of the test that I have performed. In the folder plots you can find the plots of the scalability. In the time folder the files are named as follows:
+
+- time_epyc_"size_of_world"_"number_of_MPI_Tasks"_"num_of_iterations".csv
+    If the number of iterations is not present it means that the number of iteration is 50
+- time_epyc_weak_10000.csv: Time used to produce the weak scalability graph. 10000 state for the staarting size
+- 
 
 
