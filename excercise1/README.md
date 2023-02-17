@@ -9,11 +9,11 @@ The aim of the excercise is to implement a parallel version of the Conway's Game
 
 In src directory you can find the source code.
 
-- iterate_static.c: perform the static evolution
-- iterate_ordered.c: perform the ordered evolution
-- iterate_wave.c: perform the wave evolution
-- initialize.c: perform the initialization of the world
-- read_write_pgm.c: file that read and write from/to a .pgm file
+- ``iterate_static.c``: perform the static evolution
+- ``iterate_ordered.c``: perform the ordered evolution
+- ``iterate_wave.c``: perform the wave evolution
+- ``initialize.c``: perform the initialization of the world
+- ``read_write_pgm.c: file that read and write from/to a ``.pgm`` file
 
 ## Compilation
 
@@ -52,15 +52,15 @@ After running the program execute the scripts ``joining_snap.sh`` and ``joining_
 
 In the folder times you can find the ``.csv`` files where I have printed the elapsed times of the test that I have performed. In the folder plots you can find the plots of the scalability. In the time folder the files are named as follows:
 
-- time_epyc_"size_of_world"_"number_of_MPI_Tasks"_"num_of_iterations".csv
+- ``time_epyc_"size_of_world"_"number_of_MPI_Tasks"_"num_of_iterations".csv``
 
     If the number of iterations is not present it means that the number of iteration is 50
     
-- time_thin_"world_size"_"num_of_it"_"MPI_Tasks".csv
+- ``time_thin_"world_size"_"num_of_it"_"MPI_Tasks".csv``
 
     If the number of iterations is not present it means that the number of iteration is 100
     
-- time_epyc_weak_10000.csv: Time used to produce the weak scalability graph. 10000 state for the staarting size
-- time_epyc_ord_50000.csv: ordered evolution with world_size of 5000
+- ``time_epyc_weak_10000.csv``: Time used to produce the weak scalability graph. 10000 state for the staarting size
+- ``time_epyc_ord_50000.csv``: ordered evolution with world_size of 5000
 
 
