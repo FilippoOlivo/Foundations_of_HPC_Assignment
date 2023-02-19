@@ -9,5 +9,7 @@ In this directory you can find the files used to produce the graphs inside the r
  - Core scalability:
   - File produced by a run without the usage of numactl: "size_of matrix"_"omp_policy"_"type"_"math_library"_"max_num_of_threads".csv
   - File produced by a run with the usage of numactl: "size_of matrix"numactl_"omp_policy"_"type"_"math_library"_"max_num_of_threads".csv
+
+On the ``thin`` folder you can find the ``csv``  files of the Thin nodes 
   
 In the graphs folder I have placed all the graphs present in the report
