@@ -85,11 +85,9 @@ void update_cell_serial(unsigned char * world,long world_size){
   int cond = sum/MAXVAL;
 
   //Update the cell
-  if(cond==5 || cond==6){
+  world[i] = MAXVAL;
+  if(cond>=5 & cond<=6)
     world[i]=0;
-  }else{
-    world[i] = MAXVAL;
-  }
 
   //Afeter the update of the first row we copy updated row on the
   //last row of the entire matrix

@@ -72,12 +72,9 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
     int cond = sum/MAXVAL;
     
     //Update the cell
-    if(cond==5 || cond==6){
+    world2[i] = MAXVAL;
+    if(cond>=5 & cond<=6)
       world2[i]=0;
-    }else{
-      world2[i] = MAXVAL;
-    }
-  
   }
   #pragma omp barrier
 }
@@ -109,13 +106,9 @@ void update_serial(unsigned char * world, unsigned char * world_prev,long size){
       world[row_prev*size+col_next]+world[row*size+col_prev]+world[row*size+col_next]+
       world[row_next*size+col_prev]+world[row_next*size+col]+world[row_next*size+col_next];
     int cond = sum/MAXVAL;
-
-    if(cond==5 || cond==6){
+    world_prev[i] = MAXVAL;
+    if(cond>=5 & cond<=6)
       world_prev[i]=0;
-    }else{
-      world_prev[i] = MAXVAL;
-    }
-
   }
   
 }
