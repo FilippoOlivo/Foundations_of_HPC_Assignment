@@ -47,7 +47,7 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
     }
   }
 
-  #pragma omp for schedule(static,world_size)
+  #pragma omp for
   for(long long i=world_size; i<world_size*(local_rows+1); i++){
 
     //Calculate position of the actual cell
@@ -81,14 +81,14 @@ void update_parallel_static(int rank, unsigned char * world1, unsigned char * wo
 
 void update_serial(unsigned char * world, unsigned char * world_prev,long size){
 
-  #pragma omp for schedule(static,size)
+  #pragma omp for 
   for(long i=0; i<size;i++){
     world[i] = world[size*size+i];
     world[size*(size+1)+i] = world[size+i];
   }
   
 
-  #pragma omp for schedule(static,size)
+  #pragma omp for 
   for(int i=size; i<size*(size+1); i++){
 
     //Calculate position of the actual cell
