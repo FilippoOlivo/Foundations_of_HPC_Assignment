@@ -26,12 +26,12 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
   *image = NULL;
   *xsize = *ysize = *maxval = 0;
   
-  char    MagicN[2];
+  char    val[2];
   char   *line = NULL;
   size_t  k, n = 0;
   
 
-  k = fscanf(image_file, "%2s%*c", MagicN );
+  k = fscanf(image_file, "%2s%*c", val );
 
 
   k = getline( &line, &n, image_file);
@@ -53,7 +53,7 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
   free( line );
   
   int color_depth = 1 + ( *maxval > 255 );
-  unsigned int size = *xsize * *ysize * color_depth;
+  long size = *xsize * *ysize * color_depth;
   
   if ( (*image = (char*)malloc( size )) == NULL )
     {
@@ -180,7 +180,10 @@ void run_wave(char * filename, int times, int s ,int * argc, char ** argv[])
   struct Cell ** next_update;
 
   read_pgm( &world, &maxval, &world_size, &ysize, filename);
-
+  if(maxval==-2){
+    printf("Error in file reading\n");
+    return ;
+  }
   unsigned char * world_prev = (unsigned char *)malloc(world_size*world_size*sizeof(char));
 
   next_update = (struct Cell **)malloc(sizeof(struct Cell *)*(world_size*2-1));
