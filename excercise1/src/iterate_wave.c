@@ -46,7 +46,7 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
     }
   else
     {
-
+      *maxval=-1;
       free( line );
       return;
     }
@@ -59,8 +59,6 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
     {
       fclose(image_file);
       *maxval = -2;
-      *xsize  = 0;
-      *ysize  = 0;
       return;
     }
   
@@ -69,8 +67,6 @@ void read_pgm( unsigned char **image, int *maxval, long *xsize, long *ysize, con
       free( image );
       image   = NULL;
       *maxval = -3;
-      *xsize  = 0;
-      *ysize  = 0;
     }  
 
   fclose(image_file);
@@ -180,7 +176,7 @@ void run_wave(char * filename, int times, int s ,int * argc, char ** argv[])
   struct Cell ** next_update;
 
   read_pgm( &world, &maxval, &world_size, &ysize, filename);
-  if(maxval==-2){
+  if(maxval<0){
     printf("Error in file reading\n");
     return ;
   }
